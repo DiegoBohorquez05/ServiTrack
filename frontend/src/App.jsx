@@ -193,6 +193,8 @@ export default function App() {
       setMotivoTexto('');
     };
 
+    const esSoporteOAdmin = user.rol === 'Soporte TI' || user.rol === 'Soporte Técnico' || user.rol === 'Administrador';
+
     return (
         <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 space-y-3 shadow-sm hover:border-slate-600 transition">
           <div className="flex justify-between items-start gap-2">
@@ -201,14 +203,32 @@ export default function App() {
               <span className="text-xs bg-slate-700 text-cyan-300 px-2 py-0.5 rounded font-mono">
                 #{ticket.id} - {ticket.categoria}
               </span>
-                {ticket.prioridad && (
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
-                        ticket.prioridad === 'Alta' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' :
-                            ticket.prioridad === 'Media' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
-                                'bg-slate-700 text-slate-300'
-                    }`}>
-                  {ticket.prioridad}
-                </span>
+
+                {/* Selector de Prioridad Editable para Soporte/Admin, Badge para Empleados */}
+                {esSoporteOAdmin ? (
+                    <select
+                        value={ticket.prioridad || 'Alta'}
+                        onChange={(e) => updateTicketField(ticket.id, { prioridad: e.target.value })}
+                        className={`text-[10px] px-1.5 py-0.5 rounded font-bold border focus:outline-none cursor-pointer ${
+                            (ticket.prioridad || 'Alta') === 'Alta' ? 'bg-rose-950/80 text-rose-400 border-rose-500/40' :
+                                ticket.prioridad === 'Media' ? 'bg-amber-950/80 text-amber-400 border-amber-500/40' :
+                                    'bg-slate-700 text-slate-300 border-slate-600'
+                        }`}
+                    >
+                      <option value="Alta" className="bg-slate-800 text-rose-400 font-bold">Alta</option>
+                      <option value="Media" className="bg-slate-800 text-amber-400 font-bold">Media</option>
+                      <option value="Baja" className="bg-slate-800 text-slate-300 font-bold">Baja</option>
+                    </select>
+                ) : (
+                    ticket.prioridad && (
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
+                            ticket.prioridad === 'Alta' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' :
+                                ticket.prioridad === 'Media' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                                    'bg-slate-700 text-slate-300'
+                        }`}>
+                    {ticket.prioridad}
+                  </span>
+                    )
                 )}
               </div>
               <h3 className="text-sm font-bold text-white leading-snug">{ticket.titulo}</h3>
@@ -314,7 +334,7 @@ export default function App() {
                         onClick={() => setMostrarMotivo(!mostrarMotivo)}
                         className="bg-rose-600/80 hover:bg-rose-600 text-white text-xs px-3 py-1.5 rounded font-bold transition flex items-center gap-1 cursor-pointer"
                     >
-                      <AlertCircle size={14} /> El problema persists
+                      <AlertCircle size={14} /> El problema persiste
                     </button>
                   </div>
 
@@ -555,7 +575,7 @@ export default function App() {
               </div>
           )}
 
-          {/* BARRA DE FILTROS GLOBALES (UBICADA DEBAJO DEL DIRECTORIO DE USUARIOS) */}
+          {/* BARRA DE FILTROS GLOBALES */}
           <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm">
             <div className="flex items-center gap-2 text-cyan-300 font-bold text-sm">
               <Filter size={18} /> Filtrar Tickets
