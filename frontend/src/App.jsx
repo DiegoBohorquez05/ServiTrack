@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import API from './api';
-import { LogOut, PlusCircle, Ticket, Bot, User, CheckCircle2, Clock, AlertCircle, Users, Headphones, Send, UserPlus, RefreshCw, AlertTriangle } from 'lucide-react';
+import { LogOut, PlusCircle, Ticket, Bot, User, CheckCircle2, Clock, AlertCircle, Users, Headphones, Send, UserPlus, RefreshCw, AlertTriangle, Filter } from 'lucide-react';
 
 export default function App() {
   const [user, setUser] = useState(JSON.parse(localStorage.getItem('user')) || null);
@@ -11,7 +11,7 @@ export default function App() {
   const [nuevoNombre, setNuevoNombre] = useState('');
   const [nuevoEmail, setNuevoEmail] = useState('');
   const [nuevoPassword, setNuevoPassword] = useState('');
-  const [nuevoRolId, setNuevoRolId] = useState(3); // 3: Trabajador, 2: Soporte TI
+  const [nuevoRolId, setNuevoRolId] = useState(3);
   const [loadingAdminRegister, setLoadingAdminRegister] = useState(false);
 
   // Estado para el modal de confirmación de cambio de rol
@@ -22,12 +22,19 @@ export default function App() {
     nuevoRolNombre: ''
   });
 
+  // Estados globales de Tickets y Usuarios
   const [tickets, setTickets] = useState([]);
   const [usuariosLista, setUsuariosLista] = useState([]);
+
+  // Estados del Formulario de Ticket
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [categoria, setCategoria] = useState('Hardware');
   const [loading, setLoading] = useState(false);
+
+  // Estados para los Filtros Globales
+  const [filtroCategoria, setFiltroCategoria] = useState('Todas');
+  const [filtroPrioridad, setFiltroPrioridad] = useState('Todas');
 
   useEffect(() => {
     if (user) {
@@ -77,7 +84,6 @@ export default function App() {
     }
   };
 
-  // Abrir modal de confirmación
   const solicitarCambioRol = (usuario, nuevoRolIdTarget, nuevoRolNombreTarget) => {
     setConfirmModal({
       isOpen: true,
@@ -87,7 +93,6 @@ export default function App() {
     });
   };
 
-  // Ejecutar el cambio de rol en el backend al aceptar el modal (CORREGIDO)
   const ejecutarCambioRol = async () => {
     const { usuario, nuevoRolId } = confirmModal;
     try {
@@ -96,10 +101,7 @@ export default function App() {
       fetchUsuarios();
     } catch (err) {
       console.error('Error al actualizar rol:', err.response || err);
-      const detalleError = err.response?.data?.detail
-          || JSON.stringify(err.response?.data)
-          || err.message
-          || 'Error desconocido';
+      const detalleError = err.response?.data?.detail || JSON.stringify(err.response?.data) || err.message || 'Error desconocido';
       alert(`Error al intentar cambiar el rol: ${detalleError}`);
     } finally {
       setConfirmModal({ isOpen: false, usuario: null, nuevoRolId: null, nuevoRolNombre: '' });
@@ -154,7 +156,24 @@ export default function App() {
     }
   };
 
-  // --- COMPONENTE TARJETA DE TICKET ---
+  // --- LÓGICA DE FILTRADO ---
+  const ticketsFiltrados = tickets.filter((ticket) => {
+    const cumpleCategoria = filtroCategoria === 'Todas' || ticket.categoria === filtroCategoria;
+    const prioridadTicket = ticket.prioridad || 'Alta';
+    const cumplePrioridad = filtroPrioridad === 'Todas' || prioridadTicket === filtroPrioridad;
+
+    return cumpleCategoria && cumplePrioridad;
+  });
+
+  // Clasificación por estado sobre la lista filtrada
+  const abiertos = ticketsFiltrados.filter((t) => t.estado === 'Abierto');
+  const enProceso = ticketsFiltrados.filter((t) => t.estado === 'En Proceso');
+  const cerrados = ticketsFiltrados.filter((t) => t.estado === 'Cerrado' || t.estado === 'Resuelto');
+
+  const soporteUsuarios = usuariosLista.filter((u) => u.rol === 'Soporte TI' || u.rol === 'Soporte Técnico');
+  const empleadosUsuarios = usuariosLista.filter((u) => u.rol === 'Trabajador' || u.rol === 'Empleado');
+
+  // --- TARJETA DE TICKET ---
   const TicketCard = ({ ticket }) => {
     const [mostrarMotivo, setMostrarMotivo] = useState(false);
     const [motivoTexto, setMotivoTexto] = useState('');
@@ -178,9 +197,20 @@ export default function App() {
         <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 space-y-3 shadow-sm hover:border-slate-600 transition">
           <div className="flex justify-between items-start gap-2">
             <div>
-            <span className="text-xs bg-slate-700 text-cyan-300 px-2 py-0.5 rounded font-mono block w-fit mb-1">
-              #{ticket.id} - {ticket.categoria}
-            </span>
+              <div className="flex items-center gap-1.5 flex-wrap mb-1">
+              <span className="text-xs bg-slate-700 text-cyan-300 px-2 py-0.5 rounded font-mono">
+                #{ticket.id} - {ticket.categoria}
+              </span>
+                {ticket.prioridad && (
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
+                        ticket.prioridad === 'Alta' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' :
+                            ticket.prioridad === 'Media' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                                'bg-slate-700 text-slate-300'
+                    }`}>
+                  {ticket.prioridad}
+                </span>
+                )}
+              </div>
               <h3 className="text-sm font-bold text-white leading-snug">{ticket.titulo}</h3>
               <p className="text-[11px] text-slate-400 mt-1">Por: {ticket.usuarios?.nombre || 'Usuario'}</p>
             </div>
@@ -284,7 +314,7 @@ export default function App() {
                         onClick={() => setMostrarMotivo(!mostrarMotivo)}
                         className="bg-rose-600/80 hover:bg-rose-600 text-white text-xs px-3 py-1.5 rounded font-bold transition flex items-center gap-1 cursor-pointer"
                     >
-                      <AlertCircle size={14} /> El problema persiste
+                      <AlertCircle size={14} /> El problema persists
                     </button>
                   </div>
 
@@ -361,15 +391,6 @@ export default function App() {
     );
   }
 
-  // Filtrado de tickets por estado
-  const abiertos = tickets.filter((t) => t.estado === 'Abierto');
-  const enProceso = tickets.filter((t) => t.estado === 'En Proceso');
-  const cerrados = tickets.filter((t) => t.estado === 'Cerrado' || t.estado === 'Resuelto');
-
-  // Filtrado de usuarios por roles de la BD
-  const soporteUsuarios = usuariosLista.filter((u) => u.rol === 'Soporte TI' || u.rol === 'Soporte Técnico');
-  const empleadosUsuarios = usuariosLista.filter((u) => u.rol === 'Trabajador' || u.rol === 'Empleado');
-
   return (
       <div className="min-h-screen w-full bg-slate-900 text-white flex flex-col">
         {/* Barra Superior */}
@@ -394,7 +415,6 @@ export default function App() {
           {/* VISTA EXCLUSIVA ADMINISTRADOR */}
           {user.rol === 'Administrador' && (
               <div className="space-y-6 w-full">
-                {/* Formulario para registrar nuevos usuarios */}
                 <div className="bg-slate-800 border border-slate-700 rounded-xl p-5 shadow-md w-full">
                   <h2 className="text-base font-bold text-cyan-300 flex items-center gap-2 mb-4 border-b border-slate-700 pb-2">
                     <UserPlus size={18} /> Registrar Nuevo Usuario en la Plataforma
@@ -456,7 +476,6 @@ export default function App() {
                   </form>
                 </div>
 
-                {/* Directorio de Usuarios */}
                 <div className="bg-slate-800 border border-cyan-800/50 rounded-xl p-5 shadow-md space-y-4 w-full">
                   <div className="flex justify-between items-center border-b border-slate-700 pb-3">
                     <h2 className="text-base font-bold text-cyan-300 flex items-center gap-2">
@@ -468,7 +487,6 @@ export default function App() {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
-                    {/* Columna Soporte TI */}
                     <div className="bg-slate-900/60 border border-cyan-500/20 rounded-lg p-4 space-y-3">
                       <div className="flex items-center justify-between border-b border-cyan-500/30 pb-2">
                         <h3 className="text-xs font-bold text-cyan-400 flex items-center gap-1.5 uppercase tracking-wider">
@@ -501,7 +519,6 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Columna Empleados */}
                     <div className="bg-slate-900/60 border border-slate-700/80 rounded-lg p-4 space-y-3">
                       <div className="flex items-center justify-between border-b border-slate-700 pb-2">
                         <h3 className="text-xs font-bold text-slate-300 flex items-center gap-1.5 uppercase tracking-wider">
@@ -537,6 +554,52 @@ export default function App() {
                 </div>
               </div>
           )}
+
+          {/* BARRA DE FILTROS GLOBALES (UBICADA DEBAJO DEL DIRECTORIO DE USUARIOS) */}
+          <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm">
+            <div className="flex items-center gap-2 text-cyan-300 font-bold text-sm">
+              <Filter size={18} /> Filtrar Tickets
+            </div>
+            <div className="flex flex-wrap items-center gap-4 w-full sm:w-auto">
+              <div className="flex items-center gap-2 text-xs">
+                <label className="text-slate-400 font-semibold">Categoría:</label>
+                <select
+                    value={filtroCategoria}
+                    onChange={(e) => setFiltroCategoria(e.target.value)}
+                    className="bg-slate-700 border border-slate-600 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-400"
+                >
+                  <option value="Todas">Todas las categorías</option>
+                  <option value="Hardware">Hardware</option>
+                  <option value="Software">Software</option>
+                  <option value="Redes">Redes</option>
+                  <option value="Acceso / Permisos">Acceso / Permisos</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2 text-xs">
+                <label className="text-slate-400 font-semibold">Prioridad:</label>
+                <select
+                    value={filtroPrioridad}
+                    onChange={(e) => setFiltroPrioridad(e.target.value)}
+                    className="bg-slate-700 border border-slate-600 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-400"
+                >
+                  <option value="Todas">Todas las prioridades</option>
+                  <option value="Alta">Alta</option>
+                  <option value="Media">Media</option>
+                  <option value="Baja">Baja</option>
+                </select>
+              </div>
+
+              {(filtroCategoria !== 'Todas' || filtroPrioridad !== 'Todas') && (
+                  <button
+                      onClick={() => { setFiltroCategoria('Todas'); setFiltroPrioridad('Todas'); }}
+                      className="text-[11px] text-rose-400 hover:text-rose-300 underline cursor-pointer"
+                  >
+                    Limpiar filtros
+                  </button>
+              )}
+            </div>
+          </div>
 
           {(user.rol === 'Trabajador' || user.rol === 'Empleado') ? (
               /* VISTA TRABAJADOR */
@@ -593,14 +656,14 @@ export default function App() {
 
                 <div className="lg:col-span-2 space-y-4">
                   <h2 className="text-lg font-bold flex items-center gap-2 text-cyan-300">
-                    <Ticket size={20} /> Mis Tickets Solicitados
+                    <Ticket size={20} /> Mis Tickets Solicitados ({ticketsFiltrados.length})
                   </h2>
-                  {tickets.length === 0 ? (
+                  {ticketsFiltrados.length === 0 ? (
                       <div className="bg-slate-800 p-8 rounded-xl border border-slate-700 text-center text-slate-400">
-                        No has registrado tickets aún.
+                        No se encontraron tickets con los filtros aplicados.
                       </div>
                   ) : (
-                      tickets.map((t) => <TicketCard key={t.id} ticket={t} />)
+                      ticketsFiltrados.map((t) => <TicketCard key={t.id} ticket={t} />)
                   )}
                 </div>
               </div>
@@ -624,7 +687,7 @@ export default function App() {
                     </div>
                     <div className="space-y-3">
                       {abiertos.length === 0 ? (
-                          <p className="text-xs text-slate-500 text-center py-4">Sin tickets abiertos</p>
+                          <p className="text-xs text-slate-500 text-center py-4">Sin tickets en esta columna</p>
                       ) : (
                           abiertos.map((t) => <TicketCard key={t.id} ticket={t} />)
                       )}
@@ -643,7 +706,7 @@ export default function App() {
                     </div>
                     <div className="space-y-3">
                       {enProceso.length === 0 ? (
-                          <p className="text-xs text-slate-500 text-center py-4">Sin tickets en proceso</p>
+                          <p className="text-xs text-slate-500 text-center py-4">Sin tickets en esta columna</p>
                       ) : (
                           enProceso.map((t) => <TicketCard key={t.id} ticket={t} />)
                       )}
@@ -662,7 +725,7 @@ export default function App() {
                     </div>
                     <div className="space-y-3">
                       {cerrados.length === 0 ? (
-                          <p className="text-xs text-slate-500 text-center py-4">Sin tickets cerrados</p>
+                          <p className="text-xs text-slate-500 text-center py-4">Sin tickets en esta columna</p>
                       ) : (
                           cerrados.map((t) => <TicketCard key={t.id} ticket={t} />)
                       )}
