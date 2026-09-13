@@ -41,6 +41,10 @@ class TicketUpdate(BaseModel):
     solucion_final: Optional[str] = None
     nuevo_comentario: Optional[Dict[str, Any]] = None  # { autor, rol, mensaje, fecha }
 
+# Nuevo modelo para actualizar el rol de usuario
+class UsuarioUpdate(BaseModel):
+    rol_id: int
+
 # Autenticación JWT Helper
 def get_current_user(authorization: str = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
@@ -152,6 +156,7 @@ def update_ticket(ticket_id: int, update_data: TicketUpdate, user: dict = Depend
     res = supabase.table("tickets").update(data).eq("id", ticket_id).execute()
     return res.data
 
+# --- RUTAS DE GESTIÓN DE USUARIOS ---
 @app.get("/usuarios")
 def get_usuarios(user: dict = Depends(get_current_user)):
     if user.get("rol") != "Administrador":
@@ -175,3 +180,21 @@ def get_usuarios(user: dict = Depends(get_current_user)):
         })
 
     return usuarios
+
+@app.patch("/usuarios/{usuario_id}")
+def update_usuario_rol(usuario_id: str, data: UsuarioUpdate, user: dict = Depends(get_current_user)):
+    # Validar permisos de Administrador
+    if user.get("rol") != "Administrador":
+        raise HTTPException(status_code=403, detail="No tienes permisos para modificar usuarios")
+
+    # Impedir asignar el rol de Administrador (id 1) por este medio
+    if data.rol_id == 1:
+        raise HTTPException(status_code=400, detail="No está permitido asignar el rol de Administrador")
+
+    # Actualizar rol_id en Supabase (soporta UUIDs como string)
+    res = supabase.table("usuarios").update({"rol_id": data.rol_id}).eq("id", usuario_id).execute()
+
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    return {"message": "Rol de usuario actualizado exitosamente", "usuario": res.data[0]}

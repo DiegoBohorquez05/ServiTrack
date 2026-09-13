@@ -1,14 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import API from './api';
-import { LogOut, PlusCircle, Ticket, Bot, User, CheckCircle2, Clock, AlertCircle, Users, Headphones, Send } from 'lucide-react';
+import { LogOut, PlusCircle, Ticket, Bot, User, CheckCircle2, Clock, AlertCircle, Users, Headphones, Send, UserPlus, RefreshCw, AlertTriangle } from 'lucide-react';
 
 export default function App() {
   const [user, setUser] = useState(JSON.parse(localStorage.getItem('user')) || null);
-  const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [nombre, setNombre] = useState('');
-  const [rolId, setRolId] = useState(3); // 3: Trabajador por defecto
+
+  // Estados para la creación de usuarios desde el Admin Dashboard
+  const [nuevoNombre, setNuevoNombre] = useState('');
+  const [nuevoEmail, setNuevoEmail] = useState('');
+  const [nuevoPassword, setNuevoPassword] = useState('');
+  const [nuevoRolId, setNuevoRolId] = useState(3); // 3: Trabajador, 2: Soporte TI
+  const [loadingAdminRegister, setLoadingAdminRegister] = useState(false);
+
+  // Estado para el modal de confirmación de cambio de rol
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    usuario: null,
+    nuevoRolId: null,
+    nuevoRolNombre: ''
+  });
 
   const [tickets, setTickets] = useState([]);
   const [usuariosLista, setUsuariosLista] = useState([]);
@@ -26,28 +38,71 @@ export default function App() {
     }
   }, [user]);
 
-  const handleAuth = async (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     try {
-      if (isRegister) {
-        await API.post('/auth/register', {
-          nombre,
-          email,
-          password,
-          rol_id: Number(rolId)
-        });
-        alert('Registro exitoso. Por favor inicia sesión.');
-        setIsRegister(false);
-      } else {
-        const res = await API.post('/auth/login', { email, password });
-        localStorage.setItem('token', res.data.access_token);
-        localStorage.setItem('user', JSON.stringify(res.data.user));
-        setUser(res.data.user);
-      }
+      const res = await API.post('/auth/login', { email, password });
+      localStorage.setItem('token', res.data.access_token);
+      localStorage.setItem('user', JSON.stringify(res.data.user));
+      setUser(res.data.user);
+    } catch (err) {
+      console.error("Error backend:", err.response);
+      const mensaje = err.response?.data?.detail || err.message || 'Error de credenciales';
+      alert(`Error al iniciar sesión: ${JSON.stringify(mensaje)}`);
+    }
+  };
+
+  const handleRegisterByAdmin = async (e) => {
+    e.preventDefault();
+    setLoadingAdminRegister(true);
+    try {
+      await API.post('/auth/register', {
+        nombre: nuevoNombre,
+        email: nuevoEmail,
+        password: nuevoPassword,
+        rol_id: Number(nuevoRolId)
+      });
+      alert('Usuario creado exitosamente.');
+      setNuevoNombre('');
+      setNuevoEmail('');
+      setNuevoPassword('');
+      setNuevoRolId(3);
+      fetchUsuarios();
     } catch (err) {
       console.error("Error backend:", err.response);
       const mensaje = err.response?.data?.detail || err.message || 'Error desconocido';
-      alert(`Error: ${JSON.stringify(mensaje)}`);
+      alert(`Error al registrar usuario: ${JSON.stringify(mensaje)}`);
+    } finally {
+      setLoadingAdminRegister(false);
+    }
+  };
+
+  // Abrir modal de confirmación
+  const solicitarCambioRol = (usuario, nuevoRolIdTarget, nuevoRolNombreTarget) => {
+    setConfirmModal({
+      isOpen: true,
+      usuario,
+      nuevoRolId: nuevoRolIdTarget,
+      nuevoRolNombre: nuevoRolNombreTarget
+    });
+  };
+
+  // Ejecutar el cambio de rol en el backend al aceptar el modal (CORREGIDO)
+  const ejecutarCambioRol = async () => {
+    const { usuario, nuevoRolId } = confirmModal;
+    try {
+      await API.patch(`/usuarios/${usuario.id}`, { rol_id: Number(nuevoRolId) });
+      alert(`El rol de ${usuario.nombre} ha sido actualizado correctamente.`);
+      fetchUsuarios();
+    } catch (err) {
+      console.error('Error al actualizar rol:', err.response || err);
+      const detalleError = err.response?.data?.detail
+          || JSON.stringify(err.response?.data)
+          || err.message
+          || 'Error desconocido';
+      alert(`Error al intentar cambiar el rol: ${detalleError}`);
+    } finally {
+      setConfirmModal({ isOpen: false, usuario: null, nuevoRolId: null, nuevoRolNombre: '' });
     }
   };
 
@@ -130,7 +185,6 @@ export default function App() {
               <p className="text-[11px] text-slate-400 mt-1">Por: {ticket.usuarios?.nombre || 'Usuario'}</p>
             </div>
 
-            {/* Insignia dinámica de estado (Sin menú desplegable) */}
             <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold flex items-center gap-1 ${
                 ticket.estado === 'Abierto' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
                     ticket.estado === 'En Proceso' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
@@ -144,7 +198,6 @@ export default function App() {
             {ticket.descripcion}
           </p>
 
-          {/* Sugerencia Inicial IA */}
           {ticket.respuesta_ia && (
               <div className="bg-cyan-950/30 border border-cyan-800/40 p-2.5 rounded-lg space-y-1">
                 <div className="flex items-center gap-1.5 text-cyan-400 text-[10px] font-bold uppercase tracking-wider">
@@ -154,10 +207,7 @@ export default function App() {
               </div>
           )}
 
-          {/* --- HILO DE CONVERSACIÓN / HISTORIAL DE RESPUESTAS --- */}
           <div className="pt-2 border-t border-slate-700/60 space-y-3">
-
-            {/* Renderizado del historial de mensajes */}
             {ticket.historial_respuestas && ticket.historial_respuestas.length > 0 && (
                 <div className="space-y-2">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
@@ -182,7 +232,6 @@ export default function App() {
                 </div>
             )}
 
-            {/* VISTA PARA SOPORTE TI: Redactar respuesta (Cambia automáticamente el estado a 'En Proceso') */}
             {(user.rol === 'Soporte TI' || user.rol === 'Soporte Técnico') && ticket.estado !== 'Cerrado' && (
                 <div className="space-y-1">
                   <label className="block text-[11px] font-bold text-emerald-400">
@@ -211,7 +260,6 @@ export default function App() {
                 </div>
             )}
 
-            {/* VISTA PARA TRABAJADOR / EMPLEADO: Calificar solución recibida */}
             {(user.rol === 'Trabajador' || user.rol === 'Empleado') && ticket.estado !== 'Cerrado' && ticket.historial_respuestas?.length > 0 && (
                 <div className="bg-slate-900/80 border border-slate-700 p-3 rounded-lg space-y-3 mt-2">
                   <p className="text-xs text-slate-300 font-semibold">¿La respuesta dada resuelve tu problema?</p>
@@ -240,7 +288,6 @@ export default function App() {
                     </button>
                   </div>
 
-                  {/* Formulario integrado desplegable para ingresar la razón */}
                   {mostrarMotivo && (
                       <div className="pt-2 border-t border-slate-700/80 space-y-2">
                         <label className="block text-[11px] font-semibold text-rose-300">
@@ -268,33 +315,20 @@ export default function App() {
                   )}
                 </div>
             )}
-
           </div>
         </div>
     );
   };
 
-  // --- VISTA LOGIN Y REGISTRO ---
+  // --- VISTA LOGIN ---
   if (!user) {
     return (
-        <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center p-4">
+        <div className="min-h-screen w-full bg-slate-900 text-white flex items-center justify-center p-4">
           <div className="bg-slate-800 p-8 rounded-xl shadow-2xl w-full max-w-md border border-slate-700">
             <h1 className="text-3xl font-bold text-cyan-400 text-center mb-1">ServiTrack</h1>
             <p className="text-slate-400 text-center mb-6 text-sm">Plataforma de Mesa de Ayuda con IA</p>
 
-            <form onSubmit={handleAuth} className="space-y-4">
-              {isRegister && (
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">Nombre Completo</label>
-                    <input
-                        type="text"
-                        required
-                        className="w-full bg-slate-700 border border-slate-600 rounded p-2 text-white focus:outline-none focus:border-cyan-400"
-                        value={nombre}
-                        onChange={(e) => setNombre(e.target.value)}
-                    />
-                  </div>
-              )}
+            <form onSubmit={handleLogin} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">Correo Electrónico</label>
                 <input
@@ -315,36 +349,13 @@ export default function App() {
                     onChange={(e) => setPassword(e.target.value)}
                 />
               </div>
-              {isRegister && (
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">Rol de Usuario</label>
-                    <select
-                        className="w-full bg-slate-700 border border-slate-600 rounded p-2 text-white focus:outline-none focus:border-cyan-400"
-                        value={rolId}
-                        onChange={(e) => setRolId(e.target.value)}
-                    >
-                      <option value={3}>Trabajador</option>
-                      <option value={2}>Soporte TI</option>
-                    </select>
-                  </div>
-              )}
               <button
                   type="submit"
                   className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-2 rounded transition duration-200 mt-2 cursor-pointer"
               >
-                {isRegister ? 'Registrarse' : 'Iniciar Sesión'}
+                Iniciar Sesión
               </button>
             </form>
-
-            <p className="text-center text-sm text-slate-400 mt-4">
-              {isRegister ? '¿Ya tienes cuenta?' : '¿No tienes cuenta?'}
-              <button
-                  onClick={() => setIsRegister(!isRegister)}
-                  className="text-cyan-400 ml-2 underline font-medium cursor-pointer"
-              >
-                {isRegister ? 'Inicia Sesión' : 'Regístrate aquí'}
-              </button>
-            </p>
           </div>
         </div>
     );
@@ -355,14 +366,14 @@ export default function App() {
   const enProceso = tickets.filter((t) => t.estado === 'En Proceso');
   const cerrados = tickets.filter((t) => t.estado === 'Cerrado' || t.estado === 'Resuelto');
 
-  // Filtrado de usuarios por roles de la BD (Soporte TI vs Trabajador)
+  // Filtrado de usuarios por roles de la BD
   const soporteUsuarios = usuariosLista.filter((u) => u.rol === 'Soporte TI' || u.rol === 'Soporte Técnico');
   const empleadosUsuarios = usuariosLista.filter((u) => u.rol === 'Trabajador' || u.rol === 'Empleado');
 
   return (
-      <div className="min-h-screen bg-slate-900 text-white flex flex-col">
+      <div className="min-h-screen w-full bg-slate-900 text-white flex flex-col">
         {/* Barra Superior */}
-        <header className="bg-slate-800 border-b border-slate-700 p-4 px-8 flex justify-between items-center shadow-lg">
+        <header className="bg-slate-800 border-b border-slate-700 p-4 px-8 flex justify-between items-center shadow-lg w-full">
           <div>
             <h1 className="text-2xl font-bold text-cyan-400">ServiTrack</h1>
             <p className="text-xs text-slate-400 flex items-center gap-1">
@@ -377,77 +388,150 @@ export default function App() {
           </button>
         </header>
 
-        {/* Panel Principal */}
-        <main className="max-w-7xl w-full mx-auto p-6 flex-1 space-y-6">
+        {/* Panel Principal FULL WIDTH */}
+        <main className="w-full p-6 flex-1 space-y-6">
 
-          {/* VISTA EXCLUSIVA ADMINISTRADOR: Directorio de usuarios */}
+          {/* VISTA EXCLUSIVA ADMINISTRADOR */}
           {user.rol === 'Administrador' && (
-              <div className="bg-slate-800 border border-cyan-800/50 rounded-xl p-5 shadow-md space-y-4">
-                <div className="flex justify-between items-center border-b border-slate-700 pb-3">
-                  <h2 className="text-base font-bold text-cyan-300 flex items-center gap-2">
-                    <Users size={18} /> Directorio de Usuarios Registrados
+              <div className="space-y-6 w-full">
+                {/* Formulario para registrar nuevos usuarios */}
+                <div className="bg-slate-800 border border-slate-700 rounded-xl p-5 shadow-md w-full">
+                  <h2 className="text-base font-bold text-cyan-300 flex items-center gap-2 mb-4 border-b border-slate-700 pb-2">
+                    <UserPlus size={18} /> Registrar Nuevo Usuario en la Plataforma
                   </h2>
-                  <span className="text-xs bg-cyan-950 text-cyan-400 px-3 py-1 rounded-full font-mono border border-cyan-800/60 font-bold">
-                Total: {soporteUsuarios.length + empleadosUsuarios.length}
-              </span>
+                  <form onSubmit={handleRegisterByAdmin} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">Nombre Completo</label>
+                      <input
+                          type="text"
+                          required
+                          placeholder="Ej. Ana Gómez"
+                          value={nuevoNombre}
+                          onChange={(e) => setNuevoNombre(e.target.value)}
+                          className="w-full bg-slate-700 border border-slate-600 rounded p-2 text-xs text-white focus:outline-none focus:border-cyan-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">Correo Electrónico</label>
+                      <input
+                          type="email"
+                          required
+                          placeholder="ana@empresa.com"
+                          value={nuevoEmail}
+                          onChange={(e) => setNuevoEmail(e.target.value)}
+                          className="w-full bg-slate-700 border border-slate-600 rounded p-2 text-xs text-white focus:outline-none focus:border-cyan-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">Contraseña</label>
+                      <input
+                          type="password"
+                          required
+                          placeholder="••••••••"
+                          value={nuevoPassword}
+                          onChange={(e) => setNuevoPassword(e.target.value)}
+                          className="w-full bg-slate-700 border border-slate-600 rounded p-2 text-xs text-white focus:outline-none focus:border-cyan-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">Rol de Usuario</label>
+                      <div className="flex gap-2">
+                        <select
+                            value={nuevoRolId}
+                            onChange={(e) => setNuevoRolId(e.target.value)}
+                            className="w-full bg-slate-700 border border-slate-600 rounded p-2 text-xs text-white focus:outline-none focus:border-cyan-400"
+                        >
+                          <option value={3}>Trabajador / Empleado</option>
+                          <option value={2}>Soporte TI</option>
+                        </select>
+                        <button
+                            type="submit"
+                            disabled={loadingAdminRegister}
+                            className="bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-600 text-white font-bold px-4 py-2 rounded text-xs transition flex items-center justify-center gap-1 cursor-pointer shrink-0"
+                        >
+                          {loadingAdminRegister ? 'Guardando...' : 'Crear'}
+                        </button>
+                      </div>
+                    </div>
+                  </form>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Columna 1: Soporte TI */}
-                  <div className="bg-slate-900/60 border border-cyan-500/20 rounded-lg p-4 space-y-3">
-                    <div className="flex items-center justify-between border-b border-cyan-500/30 pb-2">
-                      <h3 className="text-xs font-bold text-cyan-400 flex items-center gap-1.5 uppercase tracking-wider">
-                        <Headphones size={14} /> Personal de Soporte TI
-                      </h3>
-                      <span className="text-[11px] bg-cyan-500/10 text-cyan-300 px-2 py-0.5 rounded font-mono">
-                    {soporteUsuarios.length}
-                  </span>
-                    </div>
-                    <div className="space-y-2">
-                      {soporteUsuarios.length === 0 ? (
-                          <p className="text-xs text-slate-500 italic py-2">No hay personal de soporte registrado.</p>
-                      ) : (
-                          soporteUsuarios.map((u) => (
-                              <div key={u.id} className="bg-slate-800 border border-slate-700 p-2.5 rounded-md flex justify-between items-center">
-                                <div>
-                                  <p className="text-xs font-bold text-white">{u.nombre}</p>
-                                  <p className="text-[11px] text-slate-400">{u.email}</p>
-                                </div>
-                                <span className="text-[10px] bg-cyan-950 text-cyan-300 border border-cyan-800/60 px-2 py-0.5 rounded font-semibold">
-                          Soporte TI
-                        </span>
-                              </div>
-                          ))
-                      )}
-                    </div>
+                {/* Directorio de Usuarios */}
+                <div className="bg-slate-800 border border-cyan-800/50 rounded-xl p-5 shadow-md space-y-4 w-full">
+                  <div className="flex justify-between items-center border-b border-slate-700 pb-3">
+                    <h2 className="text-base font-bold text-cyan-300 flex items-center gap-2">
+                      <Users size={18} /> Directorio de Usuarios Registrados
+                    </h2>
+                    <span className="text-xs bg-cyan-950 text-cyan-400 px-3 py-1 rounded-full font-mono border border-cyan-800/60 font-bold">
+                  Total: {soporteUsuarios.length + empleadosUsuarios.length}
+                </span>
                   </div>
 
-                  {/* Columna 2: Empleados / Trabajadores */}
-                  <div className="bg-slate-900/60 border border-slate-700/80 rounded-lg p-4 space-y-3">
-                    <div className="flex items-center justify-between border-b border-slate-700 pb-2">
-                      <h3 className="text-xs font-bold text-slate-300 flex items-center gap-1.5 uppercase tracking-wider">
-                        <User size={14} /> Empleados / Trabajadores
-                      </h3>
-                      <span className="text-[11px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded font-mono">
-                    {empleadosUsuarios.length}
-                  </span>
-                    </div>
-                    <div className="space-y-2">
-                      {empleadosUsuarios.length === 0 ? (
-                          <p className="text-xs text-slate-500 italic py-2">No hay empleados registrados.</p>
-                      ) : (
-                          empleadosUsuarios.map((u) => (
-                              <div key={u.id} className="bg-slate-800 border border-slate-700 p-2.5 rounded-md flex justify-between items-center">
-                                <div>
-                                  <p className="text-xs font-bold text-white">{u.nombre}</p>
-                                  <p className="text-[11px] text-slate-400">{u.email}</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+                    {/* Columna Soporte TI */}
+                    <div className="bg-slate-900/60 border border-cyan-500/20 rounded-lg p-4 space-y-3">
+                      <div className="flex items-center justify-between border-b border-cyan-500/30 pb-2">
+                        <h3 className="text-xs font-bold text-cyan-400 flex items-center gap-1.5 uppercase tracking-wider">
+                          <Headphones size={14} /> Personal de Soporte TI
+                        </h3>
+                        <span className="text-[11px] bg-cyan-500/10 text-cyan-300 px-2 py-0.5 rounded font-mono">
+                      {soporteUsuarios.length}
+                    </span>
+                      </div>
+                      <div className="space-y-2">
+                        {soporteUsuarios.length === 0 ? (
+                            <p className="text-xs text-slate-500 italic py-2">No hay personal de soporte registrado.</p>
+                        ) : (
+                            soporteUsuarios.map((u) => (
+                                <div key={u.id} className="bg-slate-800 border border-slate-700 p-2.5 rounded-md flex justify-between items-center gap-2">
+                                  <div>
+                                    <p className="text-xs font-bold text-white">{u.nombre}</p>
+                                    <p className="text-[11px] text-slate-400">{u.email}</p>
+                                  </div>
+                                  <button
+                                      onClick={() => solicitarCambioRol(u, 3, 'Trabajador / Empleado')}
+                                      title="Cambiar a Rol Trabajador"
+                                      className="bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white px-2.5 py-1 rounded text-[11px] font-medium transition flex items-center gap-1 shrink-0 cursor-pointer border border-slate-600"
+                                  >
+                                    <RefreshCw size={12} /> Pasar a Trabajador
+                                  </button>
                                 </div>
-                                <span className="text-[10px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded font-semibold">
-                          Trabajador
-                        </span>
-                              </div>
-                          ))
-                      )}
+                            ))
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Columna Empleados */}
+                    <div className="bg-slate-900/60 border border-slate-700/80 rounded-lg p-4 space-y-3">
+                      <div className="flex items-center justify-between border-b border-slate-700 pb-2">
+                        <h3 className="text-xs font-bold text-slate-300 flex items-center gap-1.5 uppercase tracking-wider">
+                          <User size={14} /> Empleados / Trabajadores
+                        </h3>
+                        <span className="text-[11px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded font-mono">
+                      {empleadosUsuarios.length}
+                    </span>
+                      </div>
+                      <div className="space-y-2">
+                        {empleadosUsuarios.length === 0 ? (
+                            <p className="text-xs text-slate-500 italic py-2">No hay empleados registrados.</p>
+                        ) : (
+                            empleadosUsuarios.map((u) => (
+                                <div key={u.id} className="bg-slate-800 border border-slate-700 p-2.5 rounded-md flex justify-between items-center gap-2">
+                                  <div>
+                                    <p className="text-xs font-bold text-white">{u.nombre}</p>
+                                    <p className="text-[11px] text-slate-400">{u.email}</p>
+                                  </div>
+                                  <button
+                                      onClick={() => solicitarCambioRol(u, 2, 'Soporte TI')}
+                                      title="Cambiar a Rol Soporte TI"
+                                      className="bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-800/80 px-2.5 py-1 rounded text-[11px] font-medium transition flex items-center gap-1 shrink-0 cursor-pointer"
+                                  >
+                                    <RefreshCw size={12} /> Pasar a Soporte TI
+                                  </button>
+                                </div>
+                            ))
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -456,7 +540,7 @@ export default function App() {
 
           {(user.rol === 'Trabajador' || user.rol === 'Empleado') ? (
               /* VISTA TRABAJADOR */
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full">
                 <div className="lg:col-span-1 bg-slate-800 p-6 rounded-xl border border-slate-700 h-fit shadow-md">
                   <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-cyan-300">
                     <PlusCircle size={20} /> Crear Nuevo Ticket
@@ -521,15 +605,15 @@ export default function App() {
                 </div>
               </div>
           ) : (
-              /* TABLERO KANBAN DE COLUMNAS (SOPORTE TI Y ADMIN) */
-              <div className="space-y-4">
+              /* TABLERO KANBAN FULL WIDTH (SOPORTE TI Y ADMIN) */
+              <div className="space-y-4 w-full">
                 <h2 className="text-lg font-bold flex items-center gap-2 text-cyan-300 mb-2">
                   <Ticket size={20} /> Tablero de Gestión de Incidencias TI
                 </h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start w-full">
 
                   {/* Columna 1: Abiertos */}
-                  <div className="bg-slate-800/60 border border-amber-500/20 rounded-xl p-4 space-y-3">
+                  <div className="bg-slate-800/60 border border-amber-500/20 rounded-xl p-4 space-y-3 w-full">
                     <div className="flex justify-between items-center border-b border-amber-500/30 pb-2">
                       <h3 className="text-sm font-bold text-amber-400 flex items-center gap-2">
                         <Clock size={16} /> Abiertos
@@ -548,7 +632,7 @@ export default function App() {
                   </div>
 
                   {/* Columna 2: En Proceso */}
-                  <div className="bg-slate-800/60 border border-blue-500/20 rounded-xl p-4 space-y-3">
+                  <div className="bg-slate-800/60 border border-blue-500/20 rounded-xl p-4 space-y-3 w-full">
                     <div className="flex justify-between items-center border-b border-blue-500/30 pb-2">
                       <h3 className="text-sm font-bold text-blue-400 flex items-center gap-2">
                         <AlertCircle size={16} /> En Proceso
@@ -567,10 +651,10 @@ export default function App() {
                   </div>
 
                   {/* Columna 3: Cerrados */}
-                  <div className="bg-slate-800/60 border border-emerald-500/20 rounded-xl p-4 space-y-3">
+                  <div className="bg-slate-800/60 border border-emerald-500/20 rounded-xl p-4 space-y-3 w-full">
                     <div className="flex justify-between items-center border-b border-emerald-500/30 pb-2">
                       <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
-                        <CheckCircle2 size={16} /> Cerrados
+                        <CheckCircle2 size={16} /> Cerrados / Resueltos
                       </h3>
                       <span className="bg-emerald-500/10 text-emerald-400 text-xs px-2 py-0.5 rounded-full font-semibold border border-emerald-500/20">
                     {cerrados.length}
@@ -588,7 +672,39 @@ export default function App() {
                 </div>
               </div>
           )}
+
         </main>
+
+        {/* MODAL DE CONFIRMACIÓN DE CAMBIO DE ROL */}
+        {confirmModal.isOpen && (
+            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+              <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 max-w-md w-full shadow-2xl space-y-4">
+                <div className="flex items-center gap-3 text-amber-400">
+                  <AlertTriangle size={24} />
+                  <h3 className="text-lg font-bold text-white">¿Confirmar cambio de rol?</h3>
+                </div>
+
+                <p className="text-sm text-slate-300">
+                  ¿Está seguro que desea cambiar el rol del usuario <strong className="text-cyan-300">{confirmModal.usuario?.nombre}</strong> al nuevo rol de <strong className="text-cyan-300">{confirmModal.nuevoRolNombre}</strong>?
+                </p>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                      onClick={() => setConfirmModal({ isOpen: false, usuario: null, nuevoRolId: null, nuevoRolNombre: '' })}
+                      className="bg-slate-700 hover:bg-slate-600 text-slate-200 px-4 py-2 rounded-lg text-xs font-bold transition cursor-pointer"
+                  >
+                    Denegar / Cancelar
+                  </button>
+                  <button
+                      onClick={ejecutarCambioRol}
+                      className="bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 rounded-lg text-xs font-bold transition cursor-pointer"
+                  >
+                    Aceptar Cambio
+                  </button>
+                </div>
+              </div>
+            </div>
+        )}
       </div>
   );
 }
