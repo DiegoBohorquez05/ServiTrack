@@ -204,7 +204,7 @@ export default function App() {
                 #{ticket.id} - {ticket.categoria}
               </span>
 
-                {/* Selector de Prioridad Editable para Soporte/Admin, Badge para Empleados */}
+                {/* Selector de Prioridad Editable para Soporte/Admin */}
                 {esSoporteOAdmin ? (
                     <select
                         value={ticket.prioridad || 'Alta'}
@@ -235,13 +235,30 @@ export default function App() {
               <p className="text-[11px] text-slate-400 mt-1">Por: {ticket.usuarios?.nombre || 'Usuario'}</p>
             </div>
 
-            <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold flex items-center gap-1 ${
-                ticket.estado === 'Abierto' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
-                    ticket.estado === 'En Proceso' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
-                        'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-            }`}>
-            {ticket.estado}
-          </span>
+            {/* Selector de Estado Editable para Soporte/Admin, Badge Estático para Empleados */}
+            {esSoporteOAdmin ? (
+                <select
+                    value={ticket.estado}
+                    onChange={(e) => updateTicketField(ticket.id, { estado: e.target.value })}
+                    className={`px-2 py-1 rounded-full text-[11px] font-semibold focus:outline-none cursor-pointer border ${
+                        ticket.estado === 'Abierto' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' :
+                            ticket.estado === 'En Proceso' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' :
+                                'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                    }`}
+                >
+                  <option value="Abierto" className="bg-slate-800 text-amber-400 font-semibold">Abierto</option>
+                  <option value="En Proceso" className="bg-slate-800 text-blue-400 font-semibold">En Proceso</option>
+                  <option value="Cerrado" className="bg-slate-800 text-emerald-400 font-semibold">Cerrado</option>
+                </select>
+            ) : (
+                <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold flex items-center gap-1 ${
+                    ticket.estado === 'Abierto' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
+                        ticket.estado === 'En Proceso' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
+                            'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                }`}>
+              {ticket.estado}
+            </span>
+            )}
           </div>
 
           <p className="text-slate-300 text-xs bg-slate-900/60 p-2.5 rounded border border-slate-800/80 leading-relaxed">
