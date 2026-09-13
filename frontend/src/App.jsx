@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import API from './api';
-import { LogOut, PlusCircle, Ticket, Bot, User, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
+import { LogOut, PlusCircle, Ticket, Bot, User, CheckCircle2, Clock, AlertCircle, Users, Headphones, Send } from 'lucide-react';
 
 export default function App() {
   const [user, setUser] = useState(JSON.parse(localStorage.getItem('user')) || null);
@@ -8,9 +8,10 @@ export default function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [nombre, setNombre] = useState('');
-  const [rolId, setRolId] = useState(1); // 1: Trabajador, 2: Soporte, 3: Admin
+  const [rolId, setRolId] = useState(3); // 3: Trabajador por defecto
 
   const [tickets, setTickets] = useState([]);
+  const [usuariosLista, setUsuariosLista] = useState([]);
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [categoria, setCategoria] = useState('Hardware');
@@ -19,6 +20,9 @@ export default function App() {
   useEffect(() => {
     if (user) {
       fetchTickets();
+      if (user.rol === 'Administrador') {
+        fetchUsuarios();
+      }
     }
   }, [user]);
 
@@ -62,6 +66,15 @@ export default function App() {
     }
   };
 
+  const fetchUsuarios = async () => {
+    try {
+      const res = await API.get('/usuarios');
+      setUsuariosLista(res.data);
+    } catch (err) {
+      console.error('Error al cargar lista de usuarios:', err);
+    }
+  };
+
   const createTicket = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -77,16 +90,191 @@ export default function App() {
     }
   };
 
-  const updateEstado = async (id, estado) => {
+  const updateTicketField = async (id, dataToUpdate) => {
     try {
-      await API.patch(`/tickets/${id}`, { estado });
+      await API.patch(`/tickets/${id}`, dataToUpdate);
       fetchTickets();
     } catch (err) {
-      alert('Error al actualizar el estado');
+      alert('Error al actualizar la información del ticket');
     }
   };
 
-  // --- VISTA DE LOGIN Y REGISTRO ---
+  // --- COMPONENTE TARJETA DE TICKET ---
+  const TicketCard = ({ ticket }) => {
+    const [mostrarMotivo, setMostrarMotivo] = useState(false);
+    const [motivoTexto, setMotivoTexto] = useState('');
+
+    const handleEnviarRechazo = () => {
+      if (!motivoTexto.trim()) return;
+
+      const nuevoMsg = {
+        autor: user.nombre,
+        rol: user.rol,
+        mensaje: `El problema persiste: ${motivoTexto}`,
+        fecha: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+
+      updateTicketField(ticket.id, { estado: 'En Proceso', nuevo_comentario: nuevoMsg });
+      setMostrarMotivo(false);
+      setMotivoTexto('');
+    };
+
+    return (
+        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 space-y-3 shadow-sm hover:border-slate-600 transition">
+          <div className="flex justify-between items-start gap-2">
+            <div>
+            <span className="text-xs bg-slate-700 text-cyan-300 px-2 py-0.5 rounded font-mono block w-fit mb-1">
+              #{ticket.id} - {ticket.categoria}
+            </span>
+              <h3 className="text-sm font-bold text-white leading-snug">{ticket.titulo}</h3>
+              <p className="text-[11px] text-slate-400 mt-1">Por: {ticket.usuarios?.nombre || 'Usuario'}</p>
+            </div>
+
+            {/* Insignia dinámica de estado (Sin menú desplegable) */}
+            <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold flex items-center gap-1 ${
+                ticket.estado === 'Abierto' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
+                    ticket.estado === 'En Proceso' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
+                        'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+            }`}>
+            {ticket.estado}
+          </span>
+          </div>
+
+          <p className="text-slate-300 text-xs bg-slate-900/60 p-2.5 rounded border border-slate-800/80 leading-relaxed">
+            {ticket.descripcion}
+          </p>
+
+          {/* Sugerencia Inicial IA */}
+          {ticket.respuesta_ia && (
+              <div className="bg-cyan-950/30 border border-cyan-800/40 p-2.5 rounded-lg space-y-1">
+                <div className="flex items-center gap-1.5 text-cyan-400 text-[10px] font-bold uppercase tracking-wider">
+                  <Bot size={13} /> Sugerencia IA:
+                </div>
+                <p className="text-[11px] text-slate-300 whitespace-pre-line leading-normal">{ticket.respuesta_ia}</p>
+              </div>
+          )}
+
+          {/* --- HILO DE CONVERSACIÓN / HISTORIAL DE RESPUESTAS --- */}
+          <div className="pt-2 border-t border-slate-700/60 space-y-3">
+
+            {/* Renderizado del historial de mensajes */}
+            {ticket.historial_respuestas && ticket.historial_respuestas.length > 0 && (
+                <div className="space-y-2">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                Historial del caso:
+              </span>
+                  {ticket.historial_respuestas.map((resp, idx) => (
+                      <div
+                          key={idx}
+                          className={`p-2.5 rounded-lg border text-xs space-y-1 ${
+                              resp.rol === 'Soporte TI' || resp.rol === 'Soporte Técnico'
+                                  ? 'bg-emerald-950/20 border-emerald-800/40 text-emerald-200'
+                                  : 'bg-rose-950/20 border-rose-800/40 text-rose-200'
+                          }`}
+                      >
+                        <div className="flex justify-between items-center text-[10px] opacity-75">
+                          <span className="font-bold">{resp.autor} ({resp.rol})</span>
+                          <span>{resp.fecha}</span>
+                        </div>
+                        <p className="whitespace-pre-line leading-relaxed">{resp.mensaje}</p>
+                      </div>
+                  ))}
+                </div>
+            )}
+
+            {/* VISTA PARA SOPORTE TI: Redactar respuesta (Cambia automáticamente el estado a 'En Proceso') */}
+            {(user.rol === 'Soporte TI' || user.rol === 'Soporte Técnico') && ticket.estado !== 'Cerrado' && (
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-bold text-emerald-400">
+                    Agregar respuesta / nuevo diagnóstico:
+                  </label>
+                  <input
+                      type="text"
+                      placeholder="Escribe una respuesta y presiona Enter..."
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && e.target.value.trim() !== '') {
+                          const nuevoMsg = {
+                            autor: user.nombre,
+                            rol: user.rol,
+                            mensaje: e.target.value,
+                            fecha: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                          };
+                          updateTicketField(ticket.id, {
+                            estado: 'En Proceso',
+                            nuevo_comentario: nuevoMsg
+                          });
+                          e.target.value = '';
+                        }
+                      }}
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+            )}
+
+            {/* VISTA PARA TRABAJADOR / EMPLEADO: Calificar solución recibida */}
+            {(user.rol === 'Trabajador' || user.rol === 'Empleado') && ticket.estado !== 'Cerrado' && ticket.historial_respuestas?.length > 0 && (
+                <div className="bg-slate-900/80 border border-slate-700 p-3 rounded-lg space-y-3 mt-2">
+                  <p className="text-xs text-slate-300 font-semibold">¿La respuesta dada resuelve tu problema?</p>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => {
+                          const nuevoMsg = {
+                            autor: user.nombre,
+                            rol: user.rol,
+                            mensaje: "El usuario confirmó que el problema se solucionó correctamente.",
+                            fecha: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                          };
+                          updateTicketField(ticket.id, { estado: 'Cerrado', nuevo_comentario: nuevoMsg });
+                        }}
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3 py-1.5 rounded font-bold transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <CheckCircle2 size={14} /> Solucionado (Cerrar Ticket)
+                    </button>
+
+                    <button
+                        onClick={() => setMostrarMotivo(!mostrarMotivo)}
+                        className="bg-rose-600/80 hover:bg-rose-600 text-white text-xs px-3 py-1.5 rounded font-bold transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <AlertCircle size={14} /> El problema persiste
+                    </button>
+                  </div>
+
+                  {/* Formulario integrado desplegable para ingresar la razón */}
+                  {mostrarMotivo && (
+                      <div className="pt-2 border-t border-slate-700/80 space-y-2">
+                        <label className="block text-[11px] font-semibold text-rose-300">
+                          Explica por qué el problema continúa:
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                              type="text"
+                              placeholder="Ej. Sigo sin poder conectarme a la VPN..."
+                              value={motivoTexto}
+                              onChange={(e) => setMotivoTexto(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleEnviarRechazo();
+                              }}
+                              className="w-full bg-slate-950 border border-rose-900/50 rounded px-2.5 py-1 text-xs text-white focus:outline-none focus:border-rose-500"
+                          />
+                          <button
+                              onClick={handleEnviarRechazo}
+                              className="bg-rose-600 hover:bg-rose-500 text-white px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1 cursor-pointer shrink-0"
+                          >
+                            <Send size={12} /> Enviar
+                          </button>
+                        </div>
+                      </div>
+                  )}
+                </div>
+            )}
+
+          </div>
+        </div>
+    );
+  };
+
+  // --- VISTA LOGIN Y REGISTRO ---
   if (!user) {
     return (
         <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center p-4">
@@ -135,15 +323,14 @@ export default function App() {
                         value={rolId}
                         onChange={(e) => setRolId(e.target.value)}
                     >
-                      <option value={1}>Trabajador</option>
-                      <option value={2}>Soporte Técnico</option>
-                      <option value={3}>Administrador</option>
+                      <option value={3}>Trabajador</option>
+                      <option value={2}>Soporte TI</option>
                     </select>
                   </div>
               )}
               <button
                   type="submit"
-                  className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-2 rounded transition duration-200 mt-2"
+                  className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-2 rounded transition duration-200 mt-2 cursor-pointer"
               >
                 {isRegister ? 'Registrarse' : 'Iniciar Sesión'}
               </button>
@@ -153,7 +340,7 @@ export default function App() {
               {isRegister ? '¿Ya tienes cuenta?' : '¿No tienes cuenta?'}
               <button
                   onClick={() => setIsRegister(!isRegister)}
-                  className="text-cyan-400 ml-2 underline font-medium"
+                  className="text-cyan-400 ml-2 underline font-medium cursor-pointer"
               >
                 {isRegister ? 'Inicia Sesión' : 'Regístrate aquí'}
               </button>
@@ -163,9 +350,17 @@ export default function App() {
     );
   }
 
-  // --- VISTA PRINCIPAL (DASHBOARD) ---
+  // Filtrado de tickets por estado
+  const abiertos = tickets.filter((t) => t.estado === 'Abierto');
+  const enProceso = tickets.filter((t) => t.estado === 'En Proceso');
+  const cerrados = tickets.filter((t) => t.estado === 'Cerrado' || t.estado === 'Resuelto');
+
+  // Filtrado de usuarios por roles de la BD (Soporte TI vs Trabajador)
+  const soporteUsuarios = usuariosLista.filter((u) => u.rol === 'Soporte TI' || u.rol === 'Soporte Técnico');
+  const empleadosUsuarios = usuariosLista.filter((u) => u.rol === 'Trabajador' || u.rol === 'Empleado');
+
   return (
-      <div className="min-h-screen bg-slate-900 text-white">
+      <div className="min-h-screen bg-slate-900 text-white flex flex-col">
         {/* Barra Superior */}
         <header className="bg-slate-800 border-b border-slate-700 p-4 px-8 flex justify-between items-center shadow-lg">
           <div>
@@ -176,132 +371,223 @@ export default function App() {
           </div>
           <button
               onClick={logout}
-              className="flex items-center gap-2 bg-rose-600/80 hover:bg-rose-600 text-white px-4 py-2 rounded-lg font-medium text-sm transition"
+              className="flex items-center gap-2 bg-rose-600/80 hover:bg-rose-600 text-white px-4 py-2 rounded-lg font-medium text-sm transition cursor-pointer"
           >
             <LogOut size={16} /> Cerrar Sesión
           </button>
         </header>
 
         {/* Panel Principal */}
-        <main className="max-w-7xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <main className="max-w-7xl w-full mx-auto p-6 flex-1 space-y-6">
 
-          {/* Formulario de Creación de Ticket */}
-          <div className="lg:col-span-1 bg-slate-800 p-6 rounded-xl border border-slate-700 h-fit shadow-md">
-            <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-cyan-300">
-              <PlusCircle size={20} /> Crear Nuevo Ticket
-            </h2>
-            <form onSubmit={createTicket} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Título de Incidencia</label>
-                <input
-                    type="text"
-                    required
-                    placeholder="Ej. Sin acceso a internet en oficina"
-                    className="w-full bg-slate-700 border border-slate-600 rounded p-2 text-white focus:outline-none focus:border-cyan-400"
-                    value={titulo}
-                    onChange={(e) => setTitulo(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Categoría</label>
-                <select
-                    className="w-full bg-slate-700 border border-slate-600 rounded p-2 text-white focus:outline-none focus:border-cyan-400"
-                    value={categoria}
-                    onChange={(e) => setCategoria(e.target.value)}
-                >
-                  <option value="Hardware">Hardware</option>
-                  <option value="Software">Software</option>
-                  <option value="Redes">Redes</option>
-                  <option value="Acceso / Permisos">Acceso / Permisos</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Descripción Detallada</label>
-                <textarea
-                    required
-                    rows={4}
-                    placeholder="Describe los detalles del problema..."
-                    className="w-full bg-slate-700 border border-slate-600 rounded p-2 text-white focus:outline-none focus:border-cyan-400 resize-none"
-                    value={descripcion}
-                    onChange={(e) => setDescripcion(e.target.value)}
-                />
-              </div>
-              <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-600 text-white font-bold py-2.5 rounded transition flex justify-center items-center gap-2"
-              >
-                {loading ? 'Generando respuesta IA...' : 'Enviar Ticket'}
-              </button>
-            </form>
-          </div>
-
-          {/* Listado de Tickets */}
-          <div className="lg:col-span-2 space-y-4">
-            <h2 className="text-lg font-bold flex items-center gap-2 text-cyan-300">
-              <Ticket size={20} /> Historial de Tickets
-            </h2>
-
-            {tickets.length === 0 ? (
-                <div className="bg-slate-800 p-8 rounded-xl border border-slate-700 text-center text-slate-400">
-                  No hay tickets registrados aún.
+          {/* VISTA EXCLUSIVA ADMINISTRADOR: Directorio de usuarios */}
+          {user.rol === 'Administrador' && (
+              <div className="bg-slate-800 border border-cyan-800/50 rounded-xl p-5 shadow-md space-y-4">
+                <div className="flex justify-between items-center border-b border-slate-700 pb-3">
+                  <h2 className="text-base font-bold text-cyan-300 flex items-center gap-2">
+                    <Users size={18} /> Directorio de Usuarios Registrados
+                  </h2>
+                  <span className="text-xs bg-cyan-950 text-cyan-400 px-3 py-1 rounded-full font-mono border border-cyan-800/60 font-bold">
+                Total: {soporteUsuarios.length + empleadosUsuarios.length}
+              </span>
                 </div>
-            ) : (
-                tickets.map((t) => (
-                    <div key={t.id} className="bg-slate-800 p-5 rounded-xl border border-slate-700 space-y-3 shadow-sm hover:border-slate-600 transition">
-                      <div className="flex justify-between items-start">
-                        <div>
-                    <span className="text-xs bg-slate-700 text-cyan-300 px-2 py-0.5 rounded font-mono mr-2">
-                      #{t.id} - {t.categoria}
-                    </span>
-                          <h3 className="text-base font-bold text-white inline">{t.titulo}</h3>
-                          <p className="text-xs text-slate-400 mt-1">Registrado por: {t.usuarios?.nombre || 'Usuario'}</p>
-                        </div>
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1 ${
-                            t.estado === 'Abierto' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
-                                t.estado === 'En Proceso' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
-                                    'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                        }`}>
-                    {t.estado === 'Abierto' && <Clock size={12} />}
-                          {t.estado === 'En Proceso' && <AlertCircle size={12} />}
-                          {t.estado === 'Resuelto' && <CheckCircle2 size={12} />}
-                          {t.estado}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Columna 1: Soporte TI */}
+                  <div className="bg-slate-900/60 border border-cyan-500/20 rounded-lg p-4 space-y-3">
+                    <div className="flex items-center justify-between border-b border-cyan-500/30 pb-2">
+                      <h3 className="text-xs font-bold text-cyan-400 flex items-center gap-1.5 uppercase tracking-wider">
+                        <Headphones size={14} /> Personal de Soporte TI
+                      </h3>
+                      <span className="text-[11px] bg-cyan-500/10 text-cyan-300 px-2 py-0.5 rounded font-mono">
+                    {soporteUsuarios.length}
                   </span>
-                      </div>
-
-                      <p className="text-slate-300 text-sm bg-slate-900/60 p-3 rounded border border-slate-800">{t.descripcion}</p>
-
-                      {/* Respuesta Automática del Agente Virtual */}
-                      {t.respuesta_ia && (
-                          <div className="bg-cyan-950/30 border border-cyan-800/40 p-4 rounded-lg space-y-1.5">
-                            <div className="flex items-center gap-2 text-cyan-400 text-xs font-bold uppercase tracking-wider">
-                              <Bot size={16} /> Solución Recomendada por Agente IA:
-                            </div>
-                            <p className="text-xs text-slate-300 whitespace-pre-line leading-relaxed">{t.respuesta_ia}</p>
-                          </div>
-                      )}
-
-                      {/* Controles para personal de Soporte y Administradores */}
-                      {user.rol !== 'Trabajador' && (
-                          <div className="flex gap-2 pt-2 border-t border-slate-700/60">
-                            <button
-                                onClick={() => updateEstado(t.id, 'En Proceso')}
-                                className="text-xs bg-blue-600/80 hover:bg-blue-600 text-white px-3 py-1.5 rounded transition"
-                            >
-                              Marcar En Proceso
-                            </button>
-                            <button
-                                onClick={() => updateEstado(t.id, 'Resuelto')}
-                                className="text-xs bg-emerald-600/80 hover:bg-emerald-600 text-white px-3 py-1.5 rounded transition"
-                            >
-                              Marcar Resuelto
-                            </button>
-                          </div>
+                    </div>
+                    <div className="space-y-2">
+                      {soporteUsuarios.length === 0 ? (
+                          <p className="text-xs text-slate-500 italic py-2">No hay personal de soporte registrado.</p>
+                      ) : (
+                          soporteUsuarios.map((u) => (
+                              <div key={u.id} className="bg-slate-800 border border-slate-700 p-2.5 rounded-md flex justify-between items-center">
+                                <div>
+                                  <p className="text-xs font-bold text-white">{u.nombre}</p>
+                                  <p className="text-[11px] text-slate-400">{u.email}</p>
+                                </div>
+                                <span className="text-[10px] bg-cyan-950 text-cyan-300 border border-cyan-800/60 px-2 py-0.5 rounded font-semibold">
+                          Soporte TI
+                        </span>
+                              </div>
+                          ))
                       )}
                     </div>
-                ))
-            )}
-          </div>
+                  </div>
+
+                  {/* Columna 2: Empleados / Trabajadores */}
+                  <div className="bg-slate-900/60 border border-slate-700/80 rounded-lg p-4 space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-700 pb-2">
+                      <h3 className="text-xs font-bold text-slate-300 flex items-center gap-1.5 uppercase tracking-wider">
+                        <User size={14} /> Empleados / Trabajadores
+                      </h3>
+                      <span className="text-[11px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded font-mono">
+                    {empleadosUsuarios.length}
+                  </span>
+                    </div>
+                    <div className="space-y-2">
+                      {empleadosUsuarios.length === 0 ? (
+                          <p className="text-xs text-slate-500 italic py-2">No hay empleados registrados.</p>
+                      ) : (
+                          empleadosUsuarios.map((u) => (
+                              <div key={u.id} className="bg-slate-800 border border-slate-700 p-2.5 rounded-md flex justify-between items-center">
+                                <div>
+                                  <p className="text-xs font-bold text-white">{u.nombre}</p>
+                                  <p className="text-[11px] text-slate-400">{u.email}</p>
+                                </div>
+                                <span className="text-[10px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded font-semibold">
+                          Trabajador
+                        </span>
+                              </div>
+                          ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+          )}
+
+          {(user.rol === 'Trabajador' || user.rol === 'Empleado') ? (
+              /* VISTA TRABAJADOR */
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-1 bg-slate-800 p-6 rounded-xl border border-slate-700 h-fit shadow-md">
+                  <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-cyan-300">
+                    <PlusCircle size={20} /> Crear Nuevo Ticket
+                  </h2>
+                  <form onSubmit={createTicket} className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">Título de Incidencia</label>
+                      <input
+                          type="text"
+                          required
+                          placeholder="Ej. Sin acceso a internet en oficina"
+                          className="w-full bg-slate-700 border border-slate-600 rounded p-2 text-white focus:outline-none focus:border-cyan-400"
+                          value={titulo}
+                          onChange={(e) => setTitulo(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">Categoría</label>
+                      <select
+                          className="w-full bg-slate-700 border border-slate-600 rounded p-2 text-white focus:outline-none focus:border-cyan-400"
+                          value={categoria}
+                          onChange={(e) => setCategoria(e.target.value)}
+                      >
+                        <option value="Hardware">Hardware</option>
+                        <option value="Software">Software</option>
+                        <option value="Redes">Redes</option>
+                        <option value="Acceso / Permisos">Acceso / Permisos</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">Descripción Detallada</label>
+                      <textarea
+                          required
+                          rows={4}
+                          placeholder="Describe los detalles del problema..."
+                          className="w-full bg-slate-700 border border-slate-600 rounded p-2 text-white focus:outline-none focus:border-cyan-400 resize-none"
+                          value={descripcion}
+                          onChange={(e) => setDescripcion(e.target.value)}
+                      />
+                    </div>
+                    <button
+                        type="submit"
+                        disabled={loading}
+                        className="w-full bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-600 text-white font-bold py-2.5 rounded transition flex justify-center items-center gap-2 cursor-pointer"
+                    >
+                      {loading ? 'Generando respuesta IA...' : 'Enviar Ticket'}
+                    </button>
+                  </form>
+                </div>
+
+                <div className="lg:col-span-2 space-y-4">
+                  <h2 className="text-lg font-bold flex items-center gap-2 text-cyan-300">
+                    <Ticket size={20} /> Mis Tickets Solicitados
+                  </h2>
+                  {tickets.length === 0 ? (
+                      <div className="bg-slate-800 p-8 rounded-xl border border-slate-700 text-center text-slate-400">
+                        No has registrado tickets aún.
+                      </div>
+                  ) : (
+                      tickets.map((t) => <TicketCard key={t.id} ticket={t} />)
+                  )}
+                </div>
+              </div>
+          ) : (
+              /* TABLERO KANBAN DE COLUMNAS (SOPORTE TI Y ADMIN) */
+              <div className="space-y-4">
+                <h2 className="text-lg font-bold flex items-center gap-2 text-cyan-300 mb-2">
+                  <Ticket size={20} /> Tablero de Gestión de Incidencias TI
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+
+                  {/* Columna 1: Abiertos */}
+                  <div className="bg-slate-800/60 border border-amber-500/20 rounded-xl p-4 space-y-3">
+                    <div className="flex justify-between items-center border-b border-amber-500/30 pb-2">
+                      <h3 className="text-sm font-bold text-amber-400 flex items-center gap-2">
+                        <Clock size={16} /> Abiertos
+                      </h3>
+                      <span className="bg-amber-500/10 text-amber-400 text-xs px-2 py-0.5 rounded-full font-semibold border border-amber-500/20">
+                    {abiertos.length}
+                  </span>
+                    </div>
+                    <div className="space-y-3">
+                      {abiertos.length === 0 ? (
+                          <p className="text-xs text-slate-500 text-center py-4">Sin tickets abiertos</p>
+                      ) : (
+                          abiertos.map((t) => <TicketCard key={t.id} ticket={t} />)
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Columna 2: En Proceso */}
+                  <div className="bg-slate-800/60 border border-blue-500/20 rounded-xl p-4 space-y-3">
+                    <div className="flex justify-between items-center border-b border-blue-500/30 pb-2">
+                      <h3 className="text-sm font-bold text-blue-400 flex items-center gap-2">
+                        <AlertCircle size={16} /> En Proceso
+                      </h3>
+                      <span className="bg-blue-500/10 text-blue-400 text-xs px-2 py-0.5 rounded-full font-semibold border border-blue-500/20">
+                    {enProceso.length}
+                  </span>
+                    </div>
+                    <div className="space-y-3">
+                      {enProceso.length === 0 ? (
+                          <p className="text-xs text-slate-500 text-center py-4">Sin tickets en proceso</p>
+                      ) : (
+                          enProceso.map((t) => <TicketCard key={t.id} ticket={t} />)
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Columna 3: Cerrados */}
+                  <div className="bg-slate-800/60 border border-emerald-500/20 rounded-xl p-4 space-y-3">
+                    <div className="flex justify-between items-center border-b border-emerald-500/30 pb-2">
+                      <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
+                        <CheckCircle2 size={16} /> Cerrados
+                      </h3>
+                      <span className="bg-emerald-500/10 text-emerald-400 text-xs px-2 py-0.5 rounded-full font-semibold border border-emerald-500/20">
+                    {cerrados.length}
+                  </span>
+                    </div>
+                    <div className="space-y-3">
+                      {cerrados.length === 0 ? (
+                          <p className="text-xs text-slate-500 text-center py-4">Sin tickets cerrados</p>
+                      ) : (
+                          cerrados.map((t) => <TicketCard key={t.id} ticket={t} />)
+                      )}
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+          )}
         </main>
       </div>
   );

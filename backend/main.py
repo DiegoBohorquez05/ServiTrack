@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Dict, Any
 import jwt
 
 from database import supabase
@@ -39,6 +39,7 @@ class TicketUpdate(BaseModel):
     estado: Optional[str] = None
     prioridad: Optional[str] = None
     solucion_final: Optional[str] = None
+    nuevo_comentario: Optional[Dict[str, Any]] = None  # { autor, rol, mensaje, fecha }
 
 # Autenticación JWT Helper
 def get_current_user(authorization: str = Header(None)):
@@ -54,6 +55,10 @@ def get_current_user(authorization: str = Header(None)):
 # --- RUTAS DE AUTENTICACIÓN ---
 @app.post("/auth/register")
 def register(user_data: RegisterModel):
+    # Bloquear registro como administrador
+    if user_data.rol_id == 1:
+        raise HTTPException(status_code=400, detail="No está permitido registrar nuevos usuarios administradores")
+
     # Cifrar contraseña
     hashed = hash_password(user_data.password)
 
@@ -115,7 +120,8 @@ def create_ticket(ticket: TicketCreate, user: dict = Depends(get_current_user)):
         "usuario_id": user["sub"],
         "respuesta_ia": respuesta_ia,
         "estado": "Abierto",
-        "prioridad": "Media"
+        "prioridad": "Media",
+        "historial_respuestas": []
     }).execute()
 
     return res.data[0]
@@ -130,6 +136,42 @@ def get_tickets(user: dict = Depends(get_current_user)):
 
 @app.patch("/tickets/{ticket_id}")
 def update_ticket(ticket_id: int, update_data: TicketUpdate, user: dict = Depends(get_current_user)):
-    data = {k: v for k, v in update_data.model_dump().items() if v is not None}
+    data = {k: v for k, v in update_data.model_dump().items() if v is not None and k != "nuevo_comentario"}
+
+    # Manejo del Historial en Arreglo JSON
+    if update_data.nuevo_comentario:
+        ticket_actual = supabase.table("tickets").select("historial_respuestas").eq("id", ticket_id).execute()
+
+        historial = []
+        if ticket_actual.data and ticket_actual.data[0].get("historial_respuestas"):
+            historial = ticket_actual.data[0]["historial_respuestas"]
+
+        historial.append(update_data.nuevo_comentario)
+        data["historial_respuestas"] = historial
+
     res = supabase.table("tickets").update(data).eq("id", ticket_id).execute()
     return res.data
+
+@app.get("/usuarios")
+def get_usuarios(user: dict = Depends(get_current_user)):
+    if user.get("rol") != "Administrador":
+        raise HTTPException(status_code=403, detail="No tienes permisos para ver los usuarios")
+
+    # 1. Obtenemos los usuarios y los roles por separado para evitar fallos de JOIN en Supabase
+    res_usuarios = supabase.table("usuarios").select("id, nombre, email, rol_id").execute()
+    res_roles = supabase.table("roles").select("id, nombre").execute()
+
+    # 2. Creamos un diccionario mapeador: {1: 'Administrador', 2: 'Soporte TI', 3: 'Trabajador'}
+    mapa_roles = {r["id"]: r["nombre"] for r in res_roles.data}
+
+    # 3. Cruzamos los datos
+    usuarios = []
+    for u in res_usuarios.data:
+        usuarios.append({
+            "id": u.get("id"),
+            "nombre": u.get("nombre"),
+            "email": u.get("email"),
+            "rol": mapa_roles.get(u.get("rol_id"), "Trabajador")
+        })
+
+    return usuarios
