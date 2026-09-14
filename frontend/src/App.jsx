@@ -290,6 +290,7 @@ export default function App() {
             {ticket.descripcion}
           </p>
 
+          {/*RESPUESTA DE LA IA AL TICKET, COMPONENTE VISUAL DONDE SE MUESTRA LA RESPUESTA*/}
           {ticket.respuesta_ia && (
               <div className="bg-cyan-950/30 border border-cyan-800/40 p-2.5 rounded-lg space-y-1">
                 <div className="flex items-center gap-1.5 text-cyan-400 text-[10px] font-bold uppercase tracking-wider">
@@ -299,6 +300,7 @@ export default function App() {
               </div>
           )}
 
+          {/*HISTORIAL DE RESPUESTAS DE TICKETS*/}
           <div className="pt-2 border-t border-slate-700/60 space-y-3">
             {ticket.historial_respuestas && ticket.historial_respuestas.length > 0 && (
                 <div className="space-y-2">
@@ -385,6 +387,7 @@ export default function App() {
                     </button>
                   </div>
 
+                  {/*AQUI EL EMPLEADO SI LLEGA A VER QUE NO SE SOLUCIONO Y LE DA CONTINUIDAD AL TICKET, TIENE LA POSIBILIDAD DE ENVIAR LA RAZON POR LA QUE NO SE SOLUCIONO O SI EL PROBLEMA CONTINUA*/}
                   {mostrarMotivo && (
                       <div className="pt-2 border-t border-slate-700/80 space-y-2">
                         <label className="block text-[11px] font-semibold text-rose-300">
@@ -680,6 +683,7 @@ export default function App() {
           {(user.rol === 'Trabajador' || user.rol === 'Empleado') ? (
               /* ESTA ES LA VISTA DEL DASHBOARD CUANDO EL ROL QUE INICIO SESION ES EL TRABAJADOR O EMPLEADO */
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full">
+                {/* ESTE ES EL FORMULARIO PARA CREAR UN TICKET */}
                 <div className="lg:col-span-1 bg-slate-800 p-6 rounded-xl border border-slate-700 h-fit shadow-md">
                   <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-cyan-300">
                     <PlusCircle size={20} /> Crear Nuevo Ticket
@@ -730,6 +734,7 @@ export default function App() {
                   </form>
                 </div>
 
+                {/* AQUI ESTAN LOS TICKETS QUE EL ROL EMPLEADO HAYA SUBIDO, UNICAMENTE SE MUESTRAN LOS DEL PERFIL INICIADO */}
                 <div className="lg:col-span-2 space-y-4">
                   <h2 className="text-lg font-bold flex items-center gap-2 text-cyan-300">
                     <Ticket size={20} /> Mis Tickets Solicitados ({ticketsFiltrados.length})
@@ -744,7 +749,7 @@ export default function App() {
                 </div>
               </div>
           ) : (
-              /* TABLERO KANBAN FULL WIDTH (SOPORTE TI Y ADMIN) */
+              /* TABLERO KANBAN (SOPORTE TI Y ADMIN) */
               <div className="space-y-4 w-full">
                 <h2 className="text-lg font-bold flex items-center gap-2 text-cyan-300 mb-2">
                   <Ticket size={20} /> Tablero de Gestión de Incidencias TI
