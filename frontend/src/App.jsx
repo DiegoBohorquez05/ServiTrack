@@ -59,6 +59,8 @@ export default function App() {
     }
   };
 
+  //CONFIGURACION DE LA PLATAFORMA POR PARTE DEL ADMINISTRADOR
+  //CREACION DE USUARIOS
   const handleRegisterByAdmin = async (e) => {
     e.preventDefault();
     setLoadingAdminRegister(true);
@@ -84,6 +86,8 @@ export default function App() {
     }
   };
 
+  //CONFIGURACION DE LA PLATAFORMA POR PARTE DEL ADMINISTRADOR
+  //MANEJO Y/O CAMBIO DE ROLES DE LOS USUARIOS
   const solicitarCambioRol = (usuario, nuevoRolIdTarget, nuevoRolNombreTarget) => {
     setConfirmModal({
       isOpen: true,
@@ -114,6 +118,7 @@ export default function App() {
     setUser(null);
   };
 
+  //CARGA DE LOS TICKETS DESDE LA BASE DE DATOS
   const fetchTickets = async () => {
     try {
       const res = await API.get('/tickets');
@@ -141,7 +146,9 @@ export default function App() {
       setDescripcion('');
       fetchTickets();
     } catch (err) {
-      alert('Error al crear el ticket');
+      console.error("Error al crear ticket:", err.response);
+      const detalle = err.response?.data?.detail || err.message || 'Error interno del servidor';
+      alert(`Error al crear el ticket: ${typeof detalle === 'object' ? JSON.stringify(detalle) : detalle}`);
     } finally {
       setLoading(false);
     }
