@@ -36,6 +36,8 @@ export default function App() {
   const [filtroCategoria, setFiltroCategoria] = useState('Todas');
   const [filtroPrioridad, setFiltroPrioridad] = useState('Todas');
 
+  //EN ESTA PARTE EL USEEFFECT SE ENCARGA DE VALIDAR LA SESION Y DE EJECUTAR FUNCIONALIDADES DEPENDIENDO DEL ROL QUE INICIO SESION
+  //A SU VEZ ESTA FUNCION LO QUE HACE ES QUE AL INICIAR SESION CON ADMINISTRADOR APARTE DE TRAER TODOS LOS TICKETS, TMB TRAE LOS USUARIOS PARA LISTARLOS
   useEffect(() => {
     if (user) {
       fetchTickets();
@@ -46,13 +48,16 @@ export default function App() {
   }, [user]);
 
   const handleLogin = async (e) => {
+    //EL PREVENTDEFAULT SE ENCARGA DE QUE AL MOMENTO DE ENVIAR LA INFORMACION SE RECARGUE LA PAGINA COMPLETA
     e.preventDefault();
     try {
+      //AQUI ADENTRO SE CAPTURA LA INFORMACION DEL USUARIO QUE INICIO SESION PARA MANTENER LA SESION ABIERTA
       const res = await API.post('/auth/login', { email, password });
       localStorage.setItem('token', res.data.access_token);
       localStorage.setItem('user', JSON.stringify(res.data.user));
       setUser(res.data.user);
     } catch (err) {
+      //CAPTURADO DE ERRORES
       console.error("Error backend:", err.response);
       const mensaje = err.response?.data?.detail || err.message || 'Error de credenciales';
       alert(`Error al iniciar sesión: ${JSON.stringify(mensaje)}`);
@@ -60,7 +65,7 @@ export default function App() {
   };
 
   //CONFIGURACION DE LA PLATAFORMA POR PARTE DEL ADMINISTRADOR
-  //CREACION DE USUARIOS
+  //CREACION DE USUARIOS DESDE EL ROL ADMINISTRADOR
   const handleRegisterByAdmin = async (e) => {
     e.preventDefault();
     setLoadingAdminRegister(true);
@@ -88,6 +93,8 @@ export default function App() {
 
   //CONFIGURACION DE LA PLATAFORMA POR PARTE DEL ADMINISTRADOR
   //MANEJO Y/O CAMBIO DE ROLES DE LOS USUARIOS
+
+  //ESTA FUNCION SE ENCARGA DE CAPTURAR EL USUARIO Y EL NUEVO ROL QUE EL ADMINISTRADOR LE DA AL USUARIO
   const solicitarCambioRol = (usuario, nuevoRolIdTarget, nuevoRolNombreTarget) => {
     setConfirmModal({
       isOpen: true,
@@ -97,6 +104,8 @@ export default function App() {
     });
   };
 
+  //ESTA OTRA FUNCION SE ENCARGA DE REALIZAR EL CAMBIO EN LA BASE DE DATOS DEL ROL DEL USUARIO
+  //ES DECIR, LA FUNCION DE ARRIBA CAPTURA LOS DATOS Y ESTA EJECUTA LOS CAMBIOS CON LA INFORMACION CAPTURADA ARRIBA
   const ejecutarCambioRol = async () => {
     const { usuario, nuevoRolId } = confirmModal;
     try {
@@ -112,13 +121,14 @@ export default function App() {
     }
   };
 
+  //CERRADO DE SESION
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setUser(null);
   };
 
-  //CARGA DE LOS TICKETS DESDE LA BASE DE DATOS
+  //FUNCION ASINCRONA GET ENCARGADA DE CONSULTAR LOS TICKETS EN LA BASE DE DATOS
   const fetchTickets = async () => {
     try {
       const res = await API.get('/tickets');
@@ -128,6 +138,7 @@ export default function App() {
     }
   };
 
+  //OBTIENE LA LISTA COMPLETA DE LOS USUARIOS REGISTRADOS EN LA PLATAFORMA Y LOS GUARDA EN UNA LISTA
   const fetchUsuarios = async () => {
     try {
       const res = await API.get('/usuarios');
@@ -137,13 +148,16 @@ export default function App() {
     }
   };
 
+  //FUNCION ENCARGADA DE CREAR NUEVOS TICKETS
   const createTicket = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
+      //ENVIO DE LA INFORMACION DE LOS TICKETS A LA BASE DE DATOS
       await API.post('/tickets', { titulo, descripcion, categoria });
       setTitulo('');
       setDescripcion('');
+      //EJECUCION DE FETCHTICKETS PARA ENLISTAR EL TICKET NUEVO Y PODERLO MOSTRAR EN LOS DASHBOARDS
       fetchTickets();
     } catch (err) {
       console.error("Error al crear ticket:", err.response);
@@ -154,6 +168,7 @@ export default function App() {
     }
   };
 
+  //ACTUALIZACION DE TICKETS, ESTA FUNCION CUBRE ACTUALIZACION DE CUALQUIER INFORMACION, MOMENTO, ESTADO, PRIORIDAD
   const updateTicketField = async (id, dataToUpdate) => {
     try {
       await API.patch(`/tickets/${id}`, dataToUpdate);
@@ -172,15 +187,17 @@ export default function App() {
     return cumpleCategoria && cumplePrioridad;
   });
 
-  // Clasificación por estado sobre la lista filtrada
+  // AGRUPA LOS TICKETS DEPENDIENDO DEL ESTADO EN QUE SE ENCUENTRAN
   const abiertos = ticketsFiltrados.filter((t) => t.estado === 'Abierto');
   const enProceso = ticketsFiltrados.filter((t) => t.estado === 'En Proceso');
   const cerrados = ticketsFiltrados.filter((t) => t.estado === 'Cerrado' || t.estado === 'Resuelto');
 
+  //AGRUPA A LOS USUARIOS DEPENDIENDO DEL ROL DENTRO DE LA PLATAFORMA
   const soporteUsuarios = usuariosLista.filter((u) => u.rol === 'Soporte TI' || u.rol === 'Soporte Técnico');
   const empleadosUsuarios = usuariosLista.filter((u) => u.rol === 'Trabajador' || u.rol === 'Empleado');
 
   // --- TARJETA DE TICKET ---
+  //EN ESTA PARTE ES COMO TAL LA TARJETA DEL TICKET, SE ENCARGA DE HACER Y MOSTRAR LA ESTRUCTURA DEL TICKET EN LOS DASHBOARDS DEPENDIENDO DEL ROL QUE ESTE CON LA SESION INICIADA
   const TicketCard = ({ ticket }) => {
     const [mostrarMotivo, setMostrarMotivo] = useState(false);
     const [motivoTexto, setMotivoTexto] = useState('');
@@ -200,6 +217,7 @@ export default function App() {
       setMotivoTexto('');
     };
 
+    //AQUI LO QUE OCURRE Y SE MUESTRA CUANDO EL ROL CON LA SESION INICIADA ES SOPORTE TI
     const esSoporteOAdmin = user.rol === 'Soporte TI' || user.rol === 'Soporte Técnico' || user.rol === 'Administrador';
 
     return (
@@ -211,7 +229,7 @@ export default function App() {
                 #{ticket.id} - {ticket.categoria}
               </span>
 
-                {/* Selector de Prioridad Editable para Soporte/Admin */}
+                {/* SELECCION DE PRIORIDAD DEL TICKET POR PARTE DEL SOPORTE Y DEL ADMIN */}
                 {esSoporteOAdmin ? (
                     <select
                         value={ticket.prioridad || 'Alta'}
@@ -242,7 +260,7 @@ export default function App() {
               <p className="text-[11px] text-slate-400 mt-1">Por: {ticket.usuarios?.nombre || 'Usuario'}</p>
             </div>
 
-            {/* Selector de Estado Editable para Soporte/Admin, Badge Estático para Empleados */}
+            {/* SELECCION DEL ESTADO DEL TICKET POR PARTE DEL SOPORTE Y DEL ADMIN */}
             {esSoporteOAdmin ? (
                 <select
                     value={ticket.estado}
@@ -306,6 +324,7 @@ export default function App() {
                 </div>
             )}
 
+            {/* AQUI EL PERSONAL DE TI PUEDE ENVIAR RESPUESTAS AL EMPLEADO */}
             {(user.rol === 'Soporte TI' || user.rol === 'Soporte Técnico') && ticket.estado !== 'Cerrado' && (
                 <div className="space-y-1">
                   <label className="block text-[11px] font-bold text-emerald-400">
@@ -334,11 +353,14 @@ export default function App() {
                 </div>
             )}
 
+            {/* AQUI ES DONDE EL EMPLEADO O TRABAJADOR QUE CREO EL TICKET PUEDE DARLE MANEJO AL TICKET, DARLE CONTINUIDAD O CERRARLO */}
             {(user.rol === 'Trabajador' || user.rol === 'Empleado') && ticket.estado !== 'Cerrado' && ticket.historial_respuestas?.length > 0 && (
                 <div className="bg-slate-900/80 border border-slate-700 p-3 rounded-lg space-y-3 mt-2">
                   <p className="text-xs text-slate-300 font-semibold">¿La respuesta dada resuelve tu problema?</p>
 
+                  {/* EN ESTE DIV ES DONDE EL EMPLEADO PUEDE DECIDIR SI LA SOLUCION DADA POR SOPORTE TI CUMPLE Y SOLUCIONA EL PROBLEMA */}
                   <div className="flex items-center gap-2">
+                    {/* EN ESTE BOTON DE AQUI ABAJO EL USUARIO CONFIRMA QUE SI FUNCIONO LA SOLUCION */}
                     <button
                         onClick={() => {
                           const nuevoMsg = {
@@ -354,6 +376,7 @@ export default function App() {
                       <CheckCircle2 size={14} /> Solucionado (Cerrar Ticket)
                     </button>
 
+                    {/* EN ESTE OTRO BOTON DE ABAJO EL USUARIO DICE QUE NO FUNCIONO Y ENVIA EL MOTIVO POR EL QUE NO FUNCIONO LA SOLUCION DADA */}
                     <button
                         onClick={() => setMostrarMotivo(!mostrarMotivo)}
                         className="bg-rose-600/80 hover:bg-rose-600 text-white text-xs px-3 py-1.5 rounded font-bold transition flex items-center gap-1 cursor-pointer"
@@ -395,6 +418,7 @@ export default function App() {
   };
 
   // --- VISTA LOGIN ---
+  //ESTO ES UNICAMENTE LA PARTE DE INICIO DE SESION
   if (!user) {
     return (
         <div className="min-h-screen w-full bg-slate-900 text-white flex items-center justify-center p-4">
@@ -437,7 +461,7 @@ export default function App() {
 
   return (
       <div className="min-h-screen w-full bg-slate-900 text-white flex flex-col">
-        {/* Barra Superior */}
+        {/* ESTO ES EL HEADER DE TODOS LOS DASHBOARDS, ESTA EL BOTON DE CERRAR SESION, EL USUARIO QUE ESTA INICIADO Y DEMAS INFORMACION */}
         <header className="bg-slate-800 border-b border-slate-700 p-4 px-8 flex justify-between items-center shadow-lg w-full">
           <div>
             <h1 className="text-2xl font-bold text-cyan-400">ServiTrack</h1>
@@ -456,10 +480,11 @@ export default function App() {
         {/* Panel Principal FULL WIDTH */}
         <main className="w-full p-6 flex-1 space-y-6">
 
-          {/* VISTA EXCLUSIVA ADMINISTRADOR */}
+          {/* AQUI ES UNA PARTE DEL DASHBOARD DEL ADMIN QUE SE ENCARGA DE LA CREACION DE USUARIOS */}
           {user.rol === 'Administrador' && (
               <div className="space-y-6 w-full">
                 <div className="bg-slate-800 border border-slate-700 rounded-xl p-5 shadow-md w-full">
+                  {/* EN ESTE DIV LO QUE SE ENCUENTRA ES LA CREACION DE USUARIOS, NOSOTROS TENEMOS QUE EL ADMIN ES EL UNICO QUE PUEDE CREAR USUARIOS, NO HAY VISTA DE REGISTRO ABIERTO AL PUBLICO */}
                   <h2 className="text-base font-bold text-cyan-300 flex items-center gap-2 mb-4 border-b border-slate-700 pb-2">
                     <UserPlus size={18} /> Registrar Nuevo Usuario en la Plataforma
                   </h2>
@@ -520,6 +545,8 @@ export default function App() {
                   </form>
                 </div>
 
+                {/* EN ESTE DIV PODEMOS ENCONTRAR LAS LISTAS SEPARADAS DE LOS USUARIOS POR ROLES, POR UN LADO ESTAN LOS EMPLEADOS Y POR EL OTRO LOS DE SOPORTE DE TI */}
+                {/* NO HAY LISTA DE ADMIN PQ SOLO DEBE HABER 1 Y PS ESTAMOS INICIADOS EN ESA SESION */}
                 <div className="bg-slate-800 border border-cyan-800/50 rounded-xl p-5 shadow-md space-y-4 w-full">
                   <div className="flex justify-between items-center border-b border-slate-700 pb-3">
                     <h2 className="text-base font-bold text-cyan-300 flex items-center gap-2">
@@ -550,6 +577,7 @@ export default function App() {
                                     <p className="text-xs font-bold text-white">{u.nombre}</p>
                                     <p className="text-[11px] text-slate-400">{u.email}</p>
                                   </div>
+                                  {/* ESTE BOTON DE AQUI ABAJO ES EL QUE SE ENCARGA DE CAMBIAR DE ROL, EN CASO DE QUE EL ADMIN SE EQUIVOQUE, NO TOQUE BORRAR O INGRESAR DIRECTAMENTE A LA BD */}
                                   <button
                                       onClick={() => solicitarCambioRol(u, 3, 'Trabajador / Empleado')}
                                       title="Cambiar a Rol Trabajador"
@@ -582,6 +610,7 @@ export default function App() {
                                     <p className="text-xs font-bold text-white">{u.nombre}</p>
                                     <p className="text-[11px] text-slate-400">{u.email}</p>
                                   </div>
+                                  {/* ESTE BOTON DE AQUI ABAJO ES EL QUE SE ENCARGA DE CAMBIAR DE ROL, EN CASO DE QUE EL ADMIN SE EQUIVOQUE, NO TOQUE BORRAR O INGRESAR DIRECTAMENTE A LA BD */}
                                   <button
                                       onClick={() => solicitarCambioRol(u, 2, 'Soporte TI')}
                                       title="Cambiar a Rol Soporte TI"
@@ -599,13 +628,14 @@ export default function App() {
               </div>
           )}
 
-          {/* BARRA DE FILTROS GLOBALES */}
+          {/* AQUI ES LA BARRA DONDE SE APLICAN TODOS LOS FILTROS */}
           <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm">
             <div className="flex items-center gap-2 text-cyan-300 font-bold text-sm">
               <Filter size={18} /> Filtrar Tickets
             </div>
             <div className="flex flex-wrap items-center gap-4 w-full sm:w-auto">
               <div className="flex items-center gap-2 text-xs">
+                {/* AQUI ES POR CATEGORIA */}
                 <label className="text-slate-400 font-semibold">Categoría:</label>
                 <select
                     value={filtroCategoria}
@@ -621,6 +651,7 @@ export default function App() {
               </div>
 
               <div className="flex items-center gap-2 text-xs">
+                {/* Y AQUI POR PRIORIDAD */}
                 <label className="text-slate-400 font-semibold">Prioridad:</label>
                 <select
                     value={filtroPrioridad}
@@ -635,6 +666,7 @@ export default function App() {
               </div>
 
               {(filtroCategoria !== 'Todas' || filtroPrioridad !== 'Todas') && (
+                  /* ESTE ES EL DEFAULT QUE ES PARA QUE SE MUESTREN TODOS LOS TICKETS */
                   <button
                       onClick={() => { setFiltroCategoria('Todas'); setFiltroPrioridad('Todas'); }}
                       className="text-[11px] text-rose-400 hover:text-rose-300 underline cursor-pointer"
@@ -646,7 +678,7 @@ export default function App() {
           </div>
 
           {(user.rol === 'Trabajador' || user.rol === 'Empleado') ? (
-              /* VISTA TRABAJADOR */
+              /* ESTA ES LA VISTA DEL DASHBOARD CUANDO EL ROL QUE INICIO SESION ES EL TRABAJADOR O EMPLEADO */
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full">
                 <div className="lg:col-span-1 bg-slate-800 p-6 rounded-xl border border-slate-700 h-fit shadow-md">
                   <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-cyan-300">
@@ -782,7 +814,7 @@ export default function App() {
 
         </main>
 
-        {/* MODAL DE CONFIRMACIÓN DE CAMBIO DE ROL */}
+        {/* ESTA ES LA VENTANA EMERGENTE CUANDO SE VA A HACER UN CAMBIO DE ROL, ES LA VENTANA EN LA QUE SE CONFIRMA EL CAMBIO DE ROL */}
         {confirmModal.isOpen && (
             <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
               <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 max-w-md w-full shadow-2xl space-y-4">
