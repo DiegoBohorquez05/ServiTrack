@@ -1,8 +1,9 @@
 import bcrypt
+import os
 import jwt
 from datetime import datetime, timedelta
 
-SECRET_KEY = "tu_clave_secreta_super_segura_aqui"
+SECRET_KEY = os.getenv("JWT_SECRET", "super_secret_key_servitrack_2026")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 
